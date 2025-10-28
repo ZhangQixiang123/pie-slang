@@ -715,6 +715,7 @@ export class Constructor extends Value {
     public args: Value[],
     public index: number,
     public recursive_args: Value[],
+    public numTypeParams: number = 0  // Number of leading args that are type parameters
   ) { super() }
 
   public readBackType(context: Context): C.Core {

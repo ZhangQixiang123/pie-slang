@@ -5,7 +5,7 @@ import * as S from './source';
 
 import { PieInfoHook, Renaming, SendPieInfo, extendRenaming, makeApp, rename} from '../typechecker/utils';
 import { Location, notForInfo } from '../utils/locations';
-import { bindFree, Context, readBackContext, valInContext, getInductiveType, InductiveDatatypeBinder, ConstructorTypeBinder, EliminatorBinder, contextToEnvironment } from '../utils/context';
+import { bindFree, Context, readBackContext, valInContext, bindVal, getInductiveType, InductiveDatatypeBinder, ConstructorTypeBinder, EliminatorBinder, contextToEnvironment } from '../utils/context';
 
 import { go, stop, goOn, occurringBinderNames, Perhaps, 
   PerhapsM, SiteBinder, TypedBinder, Message, freshBinder, 
@@ -1957,13 +1957,18 @@ export class Application extends Source {
 
       // If it's an inductive type, treat this as a GeneralTypeConstructor application
       if (binder instanceof InductiveDatatypeBinder) {
-        // Create a GeneralTypeConstructor with the indices from args
+        // Split args into parameters and indices based on datatype definition
         const allArgs = [this.arg, ...this.args];
+        const inductiveType = binder.type;
+        const numParams = inductiveType.parameterTypes.length;
+        const params = allArgs.slice(0, numParams);
+        const indices = allArgs.slice(numParams);
+
         const generalTypeCtor = new GeneralTypeConstructor(
           this.location,
           funcName,
-          [], // parameters - will be inferred from context
-          allArgs
+          params,
+          indices
         );
         return generalTypeCtor.getType(ctx, renames);
       }
@@ -2183,6 +2188,93 @@ export class ConstructorApplication extends Source {
   }
 
   protected synthHelper(ctx: Context, renames: Renaming): Perhaps<C.The> {
+    // Try the original synthesis (works if user provides all args including type params)
     return Synth.synthConstructorApplication(ctx, renames, this);
+  }
+
+  public checkOut(ctx: Context, renames: Renaming, type: V.Value): Perhaps<C.Core> {
+    // Support inference mode: infer type parameters from expected type
+    const typeNow = type.now();
+
+    // Expected type must be an InductiveTypeConstructor
+    if (!(typeNow instanceof V.InductiveTypeConstructor)) {
+      return new stop(
+        this.location,
+        new Message([`Constructor ${this.constructorName} requires an inductive type, but was used as: ${typeNow.readBackType(ctx)}`])
+      );
+    }
+
+    // Look up constructor type
+    const constructorBinder = ctx.get(this.constructorName);
+    if (!constructorBinder || !(constructorBinder instanceof ConstructorTypeBinder)) {
+      throw new Error(`Unknown constructor: ${this.constructorName}`);
+    }
+
+    const ctorType = constructorBinder.constructorType;
+
+    // Verify the constructor belongs to the expected type
+    if (ctorType.type !== typeNow.name) {
+      return new stop(
+        this.location,
+        new Message([`Constructor ${this.constructorName} belongs to type ${ctorType.type}, not ${typeNow.name}`])
+      );
+    }
+
+    // Extract type parameters from the expected type
+    const typeParams = typeNow.parameters;
+
+    // Build a temporary context with type parameter bindings for evaluating argument types
+    // We need to bind the FRESH variable names that were used when the constructor was defined
+    // These are stored in argNames[0..numTypeParams-1]
+    let tempCtx = ctx;
+    for (let i = 0; i < ctorType.numTypeParams && i < typeParams.length; i++) {
+      const freshParamName = ctorType.argNames[i];
+      tempCtx = bindVal(tempCtx, freshParamName, new V.Universe(), typeParams[i]);
+    }
+
+    // For user-defined parameterized types, argTypes contains only constructor arguments,
+    // not type parameters (those are in the datatype definition)
+    const allArgTypes = [
+      ...ctorType.argTypes,
+      ...ctorType.rec_argTypes
+    ];
+
+    if (this.args.length !== allArgTypes.length) {
+      return new stop(
+        this.location,
+        new Message([`Constructor ${this.constructorName} expects ${allArgTypes.length} arguments (excluding type parameters), got ${this.args.length}`])
+      );
+    }
+
+    // Check each argument against its expected type
+    const checkedArgs: C.Core[] = [];
+    for (let i = 0; i < this.args.length; i++) {
+      const expectedType = valInContext(tempCtx, allArgTypes[i]);
+      const argCheck = this.args[i].check(ctx, renames, expectedType);
+      if (argCheck instanceof stop) return argCheck;
+      checkedArgs.push((argCheck as go<C.Core>).result);
+
+      // Update temp context with checked argument value for dependent types
+      if (i < ctorType.argNames.length - ctorType.numTypeParams) {
+        const argName = ctorType.argNames[ctorType.numTypeParams + i];
+        tempCtx = bindVal(tempCtx, argName, expectedType, valInContext(ctx, checkedArgs[i]));
+      }
+    }
+
+    // Build the complete argument list: type params + checked args
+    const allArgsCores = [...typeParams.map(v => v.readBackType(ctx)), ...checkedArgs];
+
+    // Split into non-recursive and recursive args
+    // allArgsCores = [type params..., constructor args..., recursive args...]
+    const totalNonRecursiveArgs = ctorType.numTypeParams + ctorType.argTypes.length;
+
+    return new go(new C.Constructor(
+      this.constructorName,
+      ctorType.index,
+      ctorType.type,
+      allArgsCores.slice(0, totalNonRecursiveArgs),
+      allArgsCores.slice(totalNonRecursiveArgs),
+      ctorType.numTypeParams
+    ));
   }
 }

@@ -1131,7 +1131,8 @@ export class Constructor extends Core {
     public index: number,
     public type: string,
     public args: Core[],
-    public recursive_args: Core[]
+    public recursive_args: Core[],
+    public numTypeParams: number = 0  // Number of leading args that are type parameters
   ) { super(); }
 
   public valOf(env: Environment): V.Constructor {
@@ -1140,7 +1141,8 @@ export class Constructor extends Core {
       this.type,
       this.args.map(a => a.toLazy(env)),
       this.index,
-      this.recursive_args.map(a => a.toLazy(env))
+      this.recursive_args.map(a => a.toLazy(env)),
+      this.numTypeParams
     )
   }
 

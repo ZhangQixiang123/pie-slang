@@ -197,9 +197,19 @@ export function readBack(context: Context, type: V.Value, value: V.Value): C.Cor
     const ctorTypeValue = valInContext(context, ctorTypeCoreValue) as V.ConstructorType;
 
     // Read back non-recursive arguments
+    // Note: valueNow.args includes type parameters at the beginning, but ctorTypeValue.argTypes does not
+    // We need to handle both type parameters and regular args
     const readBackArgs: C.Core[] = [];
-    for (let i = 0; i < valueNow.args.length; i++) {
-      const argType = ctorTypeValue.argTypes[i];
+
+    // Read back type parameters (they are types, so use Universe)
+    for (let i = 0; i < valueNow.numTypeParams; i++) {
+      readBackArgs.push(readBack(context, new V.Universe(), valueNow.args[i]));
+    }
+
+    // Read back regular constructor arguments
+    for (let i = valueNow.numTypeParams; i < valueNow.args.length; i++) {
+      const argTypeIndex = i - valueNow.numTypeParams;
+      const argType = ctorTypeValue.argTypes[argTypeIndex];
       readBackArgs.push(readBack(context, argType, valueNow.args[i]));
     }
 
@@ -215,7 +225,8 @@ export function readBack(context: Context, type: V.Value, value: V.Value): C.Cor
       valueNow.index,
       valueNow.type,
       readBackArgs,
-      readBackRecArgs
+      readBackRecArgs,
+      valueNow.numTypeParams
     );
   } else if (valueNow instanceof V.Neutral) {
     return valueNow.neutral.readBackNeutral(context);

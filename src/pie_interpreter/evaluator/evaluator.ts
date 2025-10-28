@@ -790,9 +790,10 @@ export function doEliminator(name: string, target: V.Value, motive: V.Value, met
       const method = methods[constructorIndex];
       let result = method;
 
-      // Apply method to constructor arguments
+      // Apply method to constructor arguments (skipping type parameters)
       // Pattern: apply all non-recursive arguments first, then recursive arguments with their inductive hypotheses
-      for (let i = 0; i < targetNow.args.length; i++) {
+      // Type parameters are at the beginning of args array, so we skip them
+      for (let i = targetNow.numTypeParams; i < targetNow.args.length; i++) {
         const arg = targetNow.args[i].now();
         result = doApp(result, arg);
       }

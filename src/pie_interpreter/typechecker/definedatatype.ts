@@ -35,8 +35,7 @@ export class DefineDatatypeSource {
   ) { }
 
   normalize_constructor(ctx: Context, rename: Renaming) {
-    // Build the type: if there are parameters, wrap in Pi, otherwise just use indices
-    const validTypeTemp = (new S.GeneralType
+      const validTypeTemp = (new S.GeneralType
       (this.location,
         this.name,
         this.parameters,
@@ -48,7 +47,6 @@ export class DefineDatatypeSource {
     }
     const validType = (validTypeTemp as go<C.Core>).result
 
-    // Extend context with parameters so constructors can reference them
     let extendedCtx = ctx;
     let extendedRename = rename;
     for (const param of this.parameters) {
@@ -63,7 +61,6 @@ export class DefineDatatypeSource {
       extendedRename = extendRenaming(extendedRename, paramName, paramNameHat);
     }
 
-    // Evaluate the type in the extended context so parameters are bound
     const validValueType = valInContext(extendedCtx, validType);
 
     // Add the inductive type itself to the context so recursive constructors can reference it
@@ -100,189 +97,6 @@ export class DefineDatatypeSource {
     })
     return [ret_ctx, ret_rename] as [Context, Renaming]
   }
-
-  /**
-   * Generate the motive type for the eliminator of this inductive type.
-   *
-   * The motive type has the form:
-   * (Π [i₁ : τ₁] ... [iₙ : τₙ] [target : T params... i₁...iₙ] U)
-   *
-   * Where:
-   * - i₁...iₙ are the indices of the inductive type
-   * - T is the inductive type name
-   * - params are the type parameters
-   * - target is the value being eliminated
-   *
-   * Examples:
-   * - Nat (no indices): (Π [n : Nat] U)
-   * - Vec E (one index k : Nat): (Π [k : Nat] [es : Vec E k] U)
-   * - Fin (one index n : Nat): (Π [n : Nat] [f : Fin n] U)
-   *
-   * IMPORTANT: Index variables must be captured inside closures and used to
-   * construct the target type, following the pattern from synthIndVec.
-   */
-  //TODO: add telescope to this if needed
-  // generateMotiveType(ctx: Context, rename: Renaming, params: V.Value[]): V.Value {
-  //   // Step 1: Extract index types from the Pi structure
-  //   let indexTypes: Array<[string, V.Value]> = [];
-  //   let cur: S.Source = this.indices;
-
-  //   while (cur instanceof S.Pi && cur.binders.length > 0) {
-  //     const binder = cur.binders[0];
-  //     const typeCore = binder.type.check(ctx, rename, new V.Universe());
-  //     if (typeCore instanceof stop) {
-  //       throw new Error(typeCore.message.toString());
-  //     }
-  //     const indexType = (typeCore as go<C.Core>).result;
-  //     indexTypes.push([binder.binder.varName, valInContext(ctx, indexType)]);
-  //     cur = cur.body as S.Source;
-  //   }
-
-  //   // Step 2: Build nested Pi structure recursively
-  //   // Each closure captures index values at runtime
-  //   const buildMotive = (level: number, capturedIndices: V.Value[]): V.Value => {
-  //     if (level >= indexTypes.length) {
-  //       // Base case: build (Π [target : InductiveType(name, params, capturedIndices)] U)
-  //       return new V.Pi(
-  //         'target',
-  //         new V.InductiveTypeConstructor(this.name, params, capturedIndices),
-  //         new HigherOrderClosure(_ => new V.Universe())
-  //       );
-  //     }
-
-  //     // Recursive case: build (Π [index : τ] ...)
-  //     const [indexName, indexType] = indexTypes[level];
-  //     return new V.Pi(
-  //       indexName,
-  //       indexType,
-  //       new HigherOrderClosure(indexVal =>
-  //         buildMotive(level + 1, [...capturedIndices, indexVal])
-  //       )
-  //     );
-  //   };
-
-  //   return buildMotive(0, []);
-  // }
-
-  /**
-   * Generate the eliminator method type for a specific constructor.
-   *
-   * Method type: (Π [i+x : τ₁]... (→ (P ix... xrec)... (P τ₂i... (C A... i+x...))))
-   *
-   * Following the Turnstile+ pattern:
-   * - Bind all constructor arguments
-   * - Add inductive hypotheses for recursive arguments
-   * - Result: motive applied to constructor application
-   */
-  generateMethodType(
-    ctx: Context,
-    rename: Renaming,
-    ctorType: C.ConstructorType,
-    motiveValue: V.Value,
-    params: V.Value[]
-  ): V.Value {
-    // Build environment with type parameters bound for evaluating argTypes
-    let argEnv = new Map(contextToEnvironment(ctx));
-
-    // Extract all VarNames from argTypes and rec_argTypes
-    const varNames = new Set<string>();
-    [...ctorType.argTypes, ...ctorType.rec_argTypes].forEach(at => {
-      if (at instanceof C.VarName) {
-        varNames.add(at.name);
-      }
-    });
-
-    // Bind each unique VarName to the corresponding type parameter
-    const varNameArray = Array.from(varNames);
-    for (let i = 0; i < varNameArray.length && i < params.length; i++) {
-      argEnv.set(varNameArray[i], params[i]);
-    }
-
-    // Get all argument types (non-recursive + recursive)
-    const allArgTypes = [
-      ...ctorType.argTypes.map(t => t.valOf(argEnv)),
-      ...ctorType.rec_argTypes.map(t => t.valOf(argEnv))
-    ];
-
-    // Build method type recursively with nested closures
-    const buildMethod = (level: number, capturedArgs: V.Value[]): V.Value => {
-      if (level >= allArgTypes.length) {
-        // All arguments captured, now add inductive hypotheses and result
-
-        // Step 1: Add IHs for recursive arguments (in reverse order)
-        let result: V.Value;
-
-        // First, build the result type: P applied to constructor
-        const ctorApp = new V.Constructor(
-          ctorType.name,
-          ctorType.type,
-          capturedArgs,
-          ctorType.index,
-          []  // Will be filled with recursive args
-        );
-
-        // Extract result indices from ctorType.resultType
-        const resultType = valInContext(ctx, ctorType.resultType);
-        const resultIndices = extractIndicesFromValue(resultType);
-
-        // Apply motive to indices and constructor
-        result = motiveValue;
-        for (const idx of resultIndices) {
-          result = doApp(result, idx);
-        }
-        result = doApp(result, ctorApp);
-
-        // Step 2: Wrap with inductive hypotheses (for recursive args, in reverse)
-        const numNonRec = ctorType.argTypes.length;
-        for (let i = ctorType.rec_argTypes.length - 1; i >= 0; i--) {
-          const recArgIndex = numNonRec + i;
-          const recArg = capturedArgs[recArgIndex];
-          const recArgTypeValue = allArgTypes[recArgIndex];
-
-          // Build IH type: P(indices... recArg)
-          // The recursive arg type (e.g., Vec E k) when evaluated in context
-          // has its indices as Values that reference captured arguments
-          let ihType = motiveValue;
-          if (recArgTypeValue instanceof V.InductiveTypeConstructor) {
-            for (const idx of recArgTypeValue.indices) {
-              ihType = doApp(ihType, idx);
-            }
-          }
-          ihType = doApp(ihType, recArg);
-
-          const currentResult = result;
-          result = new V.Pi(
-            `ih${i}`,
-            ihType,
-            new HigherOrderClosure(_ => currentResult)
-          );
-        }
-
-        return result;
-      }
-
-      // Recursive case: bind constructor argument
-      const argType = allArgTypes[level];
-      return new V.Pi(
-        `arg${level}`,
-        argType,
-        new HigherOrderClosure(argVal =>
-          buildMethod(level + 1, [...capturedArgs, argVal])
-        )
-      );
-    };
-
-    return buildMethod(0, []);
-  }
-
-}
-
-// Helper function to extract indices from a value
-function extractIndicesFromValue(val: V.Value): V.Value[] {
-  if (val instanceof V.InductiveTypeConstructor) {
-    return val.indices;
-  }
-  return [];
 }
 
 
@@ -300,14 +114,41 @@ export class GeneralConstructor {
     let cur_rename = rename
     let normalized_args = []
     let normalized_rec_args = []
-    let numTypeParams = 0
+
+    // Determine numTypeParams from the target type
+    // For parameterized types, target is an InductiveType with parameterTypes
+    let numTypeParams = 0;
+    if (target instanceof V.InductiveType) {
+      numTypeParams = target.parameterTypes.length;
+    }
+
     let argNames: string[] = []
+
+    // For parameterized types, we need to figure out the fresh names used for parameters
+    // The return type contains applications of the parameters, we can extract names from there
+    // The parameters were bound in the context before this constructor was checked
+    // They appear in the returnType of the constructor
+    // Strategy: extract parameter variable names from the returnType's params
+    const paramVarNames: string[] = [];
+    if (this.returnType instanceof S.GeneralTypeConstructor && this.returnType.params.length > 0) {
+      // Extract variable names from the return type's params
+      for (const param of this.returnType.params) {
+        if (param instanceof S.Name) {
+          // This is a reference to a type parameter
+          const freshName = rename.get(param.name);
+          if (freshName) {
+            paramVarNames.push(freshName);
+          }
+        }
+      }
+    }
+    argNames = [...paramVarNames];
 
     for (let i = 0; i < this.args.length; i++) {
       const argName = this.args[i].binder.varName
       const xhat = fresh(cur_ctx, argName)
 
-      // Store the original argument name
+      // Store the constructor argument name
       argNames.push(argName)
 
       // Get the Core representation of the type annotation
@@ -316,11 +157,6 @@ export class GeneralConstructor {
         throw new Error(resultTemp.message.toString())
       }
       const result = (resultTemp as go<C.Core>).result
-
-      // Check if this argument IS a type parameter (annotation is Universe at SOURCE level)
-      if (this.args[i].type instanceof S.Universe) {
-        numTypeParams++
-      }
 
       if (isRecursiveArgumentType(this.args[i].type,this.returnType.name)) {
         normalized_rec_args.push(result)

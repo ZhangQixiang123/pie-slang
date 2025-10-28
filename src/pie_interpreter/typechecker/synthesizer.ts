@@ -14,6 +14,7 @@ import { doApp, doCar, indVecStepType } from "../evaluator/evaluator";
 import { readBack } from '../evaluator/utils';
 import { Location } from '../utils/locations';
 import { alphaEquiv } from "../utils/alphaeqv";
+import { inspect } from "util";
 
 
 export class synthesizer {
@@ -1673,14 +1674,20 @@ export class synthesizer {
       specificResultType = ctorType.resultType.valOf(argCheckEnv);
     }
 
+    // Split checkedArgs into non-recursive and recursive args
+    // checkedArgs contains: [type params..., constructor args..., recursive args...]
+    // We need: args = [type params..., constructor args...], recursive_args = [recursive args...]
+    const totalNonRecursiveArgs = ctorType.numTypeParams + ctorType.argTypes.length;
+
     return new go(new C.The(
       specificResultType.readBackType(ctx),
       new C.Constructor(
         ctorApp.constructorName,
         ctorType.index,
         ctorType.type,
-        checkedArgs.slice(0, ctorType.argTypes.length),
-        checkedArgs.slice(ctorType.argTypes.length)
+        checkedArgs.slice(0, totalNonRecursiveArgs),
+        checkedArgs.slice(totalNonRecursiveArgs),
+        ctorType.numTypeParams
       )
     ));
 
@@ -1863,13 +1870,15 @@ export class synthesizer {
               ctorType.type,
               capturedArgs,
               ctorType.index,
-              []  // Will be filled with recursive args
+              [],  // Will be filled with recursive args
+              ctorType.numTypeParams
             );
     
             // Extract result indices from ctorType.resultType
-            const resultType = valInContext(ctx, ctorType.resultType);
+            // IMPORTANT: Use argEnv which has type parameters bound, not ctx
+            const resultType = ctorType.resultType.valOf(argEnv);
             const resultIndices = extractIndicesFromValue(resultType);
-    
+
             // Apply motive to indices and constructor
             result = motiveValue;
             for (const idx of resultIndices) {

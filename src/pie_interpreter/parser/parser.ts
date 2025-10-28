@@ -430,6 +430,47 @@ export class Parser {
         motive,
         methods
       );
+    } else if (parsee.startsWith('type-') && element instanceof Extended.List) {
+      // User-defined type constructor: (type-TypeName (params...) (indices...))
+      const typeName = parsee.substring(5); // Remove 'type-' prefix
+      const elements = (element as Extended.List).elements;
+
+      if (elements.length < 3) {
+        throw new Error(`type-${typeName} requires format: (type-${typeName} (params...) (indices...))`);
+      }
+
+      // elements[1] should be params list, elements[2] should be indices list
+      const paramsElem = elements[1];
+      const indicesElem = elements[2];
+
+      // Extract elements from both params and indices (handle both List and Nil for empty lists)
+      let paramsRaw: Expression[];
+      if (paramsElem instanceof Extended.List) {
+        paramsRaw = paramsElem.elements;
+      } else if (paramsElem instanceof Atomic.Nil) {
+        paramsRaw = [];
+      } else {
+        throw new Error(`type-${typeName} params must be a list: (type-${typeName} (params...) (indices...))`);
+      }
+
+      let indicesRaw: Expression[];
+      if (indicesElem instanceof Extended.List) {
+        indicesRaw = indicesElem.elements;
+      } else if (indicesElem instanceof Atomic.Nil) {
+        indicesRaw = [];
+      } else {
+        throw new Error(`type-${typeName} indices must be a list: (type-${typeName} (params...) (indices...))`);
+      }
+
+      const params = paramsRaw.map(p => this.parseElements(p as Element));
+      const indices = indicesRaw.map(i => this.parseElements(i as Element));
+
+      return new S.GeneralTypeConstructor(
+        syntaxToLocation(locationToSyntax(typeName, element.location)),
+        typeName,
+        params,
+        indices
+      );
     } else if (element instanceof Extended.List && (element as Extended.List).elements.length > 1) {
       let elements = (element as Extended.List).elements;
       return Maker.makeApp(
@@ -632,7 +673,7 @@ export class pieDeclarationParser {
       const lastElement = elements[elements.length - 1];
       const hasEliminator = lastElement instanceof Atomic.Symbol;
       const constructorEndIdx = hasEliminator ? elements.length - 1 : elements.length;
-      const eliminatorName = hasEliminator ? getValue(lastElement as Element) : undefined;
+      const eliminatorName = hasEliminator ? getValue(lastElement as Element) : 'elim';
 
       // Parse constructors: (constructor-name ((args...)) (ReturnType ...))
       const constructors = [];
@@ -642,30 +683,11 @@ export class pieDeclarationParser {
         const ctorArgsRaw = (ctorElement.elements[1] as Extended.List).elements || [];
         const ctorReturnType = ctorElement.elements[2] as Element;
 
-        // Parse constructor arguments: ((n Nat)) or ((j Nat) (k Nat) (j<k (Less-Than j k)))
+        // Parse constructor arguments: ((n Nat)) or ((j Nat) (k Nat) (j<k (type-Less-Than () (j k))))
         const ctorArgs = ctorArgsRaw.map(arg => {
           const pair = arg as Extended.List;
           const argType = pair.elements[1] as Element;
-
-          // Check if this is a GeneralTypeConstructor application (e.g., (Less-Than j k))
-          let parsedArgType: S.Source;
-          if (argType instanceof Extended.List && argType.elements.length > 0) {
-            const firstElem = getValue(argType.elements[0] as Element);
-            // If it starts with capital letter, treat as GeneralTypeConstructor
-            if (firstElem && firstElem[0] === firstElem[0].toUpperCase() && firstElem[0] !== firstElem[0].toLowerCase()) {
-              const typeArgs = argType.elements.slice(1).map(x => Parser.parseElements(x as Element));
-              parsedArgType = new S.GeneralTypeConstructor(
-                syntaxToLocation(elementToSyntax(argType.elements[0] as Element, argType.location)),
-                firstElem,
-                [],
-                typeArgs
-              );
-            } else {
-              parsedArgType = Parser.parseElements(argType);
-            }
-          } else {
-            parsedArgType = Parser.parseElements(argType);
-          }
+          const parsedArgType = Parser.parseElements(argType);
 
           return new TypedBinder(
             syntaxToSiteBinder(elementToSyntax(pair.elements[0] as Element, pair.location)),
@@ -673,20 +695,24 @@ export class pieDeclarationParser {
           );
         });
 
-        // Parse return type: (Less-Than zero (add1 n))
-        // This should be a GeneralTypeConstructor application
+        // Parse return type: (myEither (A B) ()) or (Less-Than () (zero (add1 n)))
+        // Format: (TypeName (param1 param2...) (idx1 idx2...))
         const returnTypeList = ctorReturnType as Extended.List;
         const returnTypeName = getValue(returnTypeList.elements[0] as Element);
 
-        // All remaining elements are indices (for indexed types) or parameters
-        // For now, treat all as indices since we need to match the datatype structure
-        const returnTypeArgs = returnTypeList.elements.slice(1).map(x => Parser.parseElements(x as Element));
+        // Parse parameters list
+        const returnTypeParamsRaw = (returnTypeList.elements[1] as Extended.List).elements || [];
+        const returnTypeParams = returnTypeParamsRaw.map(x => Parser.parseElements(x as Element));
+
+        // Parse indices list
+        const returnTypeIndicesRaw = (returnTypeList.elements[2] as Extended.List).elements || [];
+        const returnTypeIndices = returnTypeIndicesRaw.map(x => Parser.parseElements(x as Element));
 
         const returnType = new S.GeneralTypeConstructor(
           syntaxToLocation(elementToSyntax(returnTypeList.elements[0] as Element, returnTypeList.location)),
           returnTypeName,
-          [], // parameters - will be filled based on datatype definition
-          returnTypeArgs // indices
+          returnTypeParams,
+          returnTypeIndices
         );
 
         constructors.push(
