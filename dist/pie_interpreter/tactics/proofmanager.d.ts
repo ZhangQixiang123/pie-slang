@@ -1,4 +1,4 @@
-import { ProofState } from './proofstate';
+import { ProofState, ProofTreeData } from './proofstate';
 import { Tactic } from './tactics';
 import { Context } from '../utils/context';
 import { Location } from '../utils/locations';
@@ -7,5 +7,6 @@ export declare class ProofManager {
     currentState: ProofState | null;
     startProof(name: string, context: Context, location: Location): Perhaps<string>;
     applyTactic(tactic: Tactic): Perhaps<string>;
+    getProofTreeData(): ProofTreeData | null;
 }
 //# sourceMappingURL=proofmanager.d.ts.map

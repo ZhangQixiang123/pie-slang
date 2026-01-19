@@ -16,6 +16,7 @@ export declare class Goal {
     addHypothesis(name: string, type: Value): void;
     getVariableType(name: string): Value | undefined;
     prettyPrintWithContext(): string;
+    toSerializable(isComplete: boolean, isCurrent: boolean): SerializableGoal;
 }
 export declare class GoalNode {
     goal: Goal;
@@ -23,9 +24,12 @@ export declare class GoalNode {
     parent: GoalNode | null;
     isComplete: boolean;
     childFocusIndex: number;
+    appliedTactic?: string;
+    completedBy?: string;
     constructor(goal: Goal);
     addChildren(children: GoalNode[]): void;
     findById(goalId: GoalId): GoalNode | null;
+    toSerializable(currentGoalId: string | null): SerializableGoalNode;
 }
 export declare class ProofState {
     location: Location;
@@ -45,10 +49,33 @@ export declare class ProofState {
     private nextGoalAux;
     previousGoal(): void;
     private PreviousGoalAux;
+    getProofTreeData(): ProofTreeData;
 }
 export interface ProofSummary {
     totalGoals: number;
     completedGoals: number;
+}
+export interface SerializableContextEntry {
+    name: string;
+    type: string;
+}
+export interface SerializableGoal {
+    id: string;
+    type: string;
+    contextEntries: SerializableContextEntry[];
+    isComplete: boolean;
+    isCurrent: boolean;
+}
+export interface SerializableGoalNode {
+    goal: SerializableGoal;
+    children: SerializableGoalNode[];
+    appliedTactic?: string;
+    completedBy?: string;
+}
+export interface ProofTreeData {
+    root: SerializableGoalNode;
+    isComplete: boolean;
+    currentGoalId: string | null;
 }
 export {};
 //# sourceMappingURL=proofstate.d.ts.map

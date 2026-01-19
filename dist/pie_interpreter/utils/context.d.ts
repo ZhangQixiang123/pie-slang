@@ -5,6 +5,7 @@ import { go, stop, Perhaps } from '../types/utils';
 import { Environment } from './environment';
 import { Source } from '../types/source';
 import { Tactic } from '../tactics/tactics';
+import { ProofTreeData } from '../tactics/proofstate';
 export type Context = Map<string, Binder>;
 export declare function extendContext(ctx: Context, name: string, binder: Binder): Context;
 export declare function valInContext(ctx: Context, expr: C.Core): Value;
@@ -17,6 +18,8 @@ export declare function addDefineToContext(ctx: Context, fun: string, funLoc: Lo
 export interface TacticalResult {
     context: Context;
     message: string;
+    proofTree?: ProofTreeData;
+    isIncomplete?: boolean;
 }
 export declare function addDefineTacticallyToContext(ctx: Context, name: string, location: Location, tactics: Tactic[]): Perhaps<TacticalResult>;
 export declare function contextToEnvironment(ctx: Context): Environment;
