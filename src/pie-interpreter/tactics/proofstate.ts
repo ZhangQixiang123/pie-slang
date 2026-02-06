@@ -190,6 +190,20 @@ export class GoalNode {
     return null;
   }
 
+  /**
+   * Check if this entire subtree is complete.
+   * A subtree is complete if this node is complete AND all children's subtrees are complete.
+   */
+  computeIsSubtreeComplete(): boolean {
+    if (!this.isComplete) {
+      return false;
+    }
+    if (this.children.length === 0) {
+      return true; // Leaf node that is complete
+    }
+    return this.children.every(child => child.computeIsSubtreeComplete());
+  }
+
   toSerializable(currentGoalId: string | null): SerializableGoalNode {
     const isCurrent = this.goal.id === currentGoalId;
 
@@ -205,7 +219,8 @@ export class GoalNode {
       goal: this.goal.toSerializableWithIntroducedBy(this.isComplete, isCurrent, parentContextNames, introducingTactic),
       children: this.children.map(child => child.toSerializable(currentGoalId)),
       appliedTactic: this.appliedTactic,
-      completedBy: this.completedBy
+      completedBy: this.completedBy,
+      isSubtreeComplete: this.computeIsSubtreeComplete(),
     };
   }
 }
@@ -414,6 +429,7 @@ export interface SerializableGoalNode {
   children: SerializableGoalNode[];
   appliedTactic?: string;
   completedBy?: string;  // Tactic that directly solved this leaf goal
+  isSubtreeComplete?: boolean;  // True if this node and all descendants are complete
 }
 
 export interface ProofTreeData {

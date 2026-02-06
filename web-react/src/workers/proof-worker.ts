@@ -47,6 +47,7 @@ export interface SerializableGoalNode {
   children: SerializableGoalNode[];
   appliedTactic?: string;
   completedBy?: string;
+  isSubtreeComplete?: boolean;  // True if this node and all descendants are complete
 }
 
 export interface ProofTreeData {

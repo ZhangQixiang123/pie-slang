@@ -53,6 +53,7 @@ export interface GoalNodeData {
   status: 'pending' | 'in-progress' | 'completed';
   parentGoalId?: string;      // For scope inheritance
   completedBy?: string;       // Tactic that solved this goal
+  isSubtreeComplete?: boolean; // True if this goal and all descendants are complete
   [key: string]: unknown;     // Index signature for React Flow compatibility
 }
 
@@ -156,6 +157,10 @@ export interface ProofState {
 
   // Manual node positions (preserves user-dragged positions across syncs)
   manualPositions: Map<string, { x: number; y: number }>;
+
+  // Branch collapse state
+  collapsedBranches: Set<string>;  // Set of goal IDs whose subtrees are collapsed
+  autoCollapseEnabled: boolean;    // Whether to auto-collapse completed subtrees
 }
 
 export interface ProofActions {
@@ -195,6 +200,11 @@ export interface ProofActions {
   // Manual position management
   setManualPosition: (nodeId: string, position: { x: number; y: number }) => void;
   clearManualPositions: () => void;
+
+  // Branch collapse management
+  toggleBranchCollapse: (goalId: string) => void;
+  expandAllBranches: () => void;
+  setAutoCollapseEnabled: (enabled: boolean) => void;
 }
 
 export type ProofStore = ProofState & ProofActions;

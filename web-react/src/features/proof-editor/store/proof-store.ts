@@ -44,6 +44,8 @@ const initialState: ProofState = {
   history: [],
   historyIndex: -1,
   manualPositions: new Map(),
+  collapsedBranches: new Set(),
+  autoCollapseEnabled: true,
 };
 
 // Track high water mark for edge count per session to prevent stale sync race conditions
@@ -433,6 +435,34 @@ export const useProofStore = create<ProofStore>()(
           if (claimName) {
             state.claimName = claimName;
           }
+
+          // Auto-collapse completed subtrees
+          if (state.autoCollapseEnabled) {
+            const findCollapsibleNodes = (node: typeof proofTree.root): string[] => {
+              const result: string[] = [];
+              // If this subtree is complete AND has children, it's collapsible
+              if (node.isSubtreeComplete && node.children.length > 0) {
+                result.push(node.goal.id);
+              }
+              // Check children for collapsible subtrees (only if this node is not complete)
+              // This prevents nested collapse (if parent is collapsed, don't also collapse children)
+              if (!node.isSubtreeComplete) {
+                node.children.forEach(child => {
+                  result.push(...findCollapsibleNodes(child));
+                });
+              }
+              return result;
+            };
+
+            const collapsibleIds = findCollapsibleNodes(proofTree.root);
+            collapsibleIds.forEach(id => {
+              // Only auto-collapse if not already expanded by user
+              if (!state.collapsedBranches.has(id)) {
+                state.collapsedBranches.add(id);
+                console.log(`[syncFromWorker] 🔽 Auto-collapsing completed subtree: ${id}`);
+              }
+            });
+          }
         });
       },
 
@@ -486,7 +516,7 @@ export const useProofStore = create<ProofStore>()(
       },
 
       reset: () => {
-        set(() => ({ ...initialState, manualPositions: new Map() }));
+        set(() => ({ ...initialState, manualPositions: new Map(), collapsedBranches: new Set() }));
         useHistoryStore.getState().reset();
         useMetadataStore.getState().reset();
         // Clear high water marks for all sessions
@@ -527,6 +557,32 @@ export const useProofStore = create<ProofStore>()(
               return newNode;
             });
           }
+        });
+      },
+
+      // ================================================
+      // Branch Collapse Management
+      // ================================================
+
+      toggleBranchCollapse: (goalId: string) => {
+        set((state) => {
+          if (state.collapsedBranches.has(goalId)) {
+            state.collapsedBranches.delete(goalId);
+          } else {
+            state.collapsedBranches.add(goalId);
+          }
+        });
+      },
+
+      expandAllBranches: () => {
+        set((state) => {
+          state.collapsedBranches.clear();
+        });
+      },
+
+      setAutoCollapseEnabled: (enabled: boolean) => {
+        set((state) => {
+          state.autoCollapseEnabled = enabled;
         });
       },
 
@@ -680,6 +736,12 @@ export const useProofTreeData = () => useProofStore((s) => s.proofTreeData);
 export const useClaimNameFromProof = () => useProofStore((s) => s.claimName);
 export const useClearManualPositions = () => useProofStore((s) => s.clearManualPositions);
 export const useHasManualPositions = () => useProofStore((s) => s.manualPositions.size > 0);
+
+// Branch collapse selectors
+export const useCollapsedBranches = () => useProofStore((s) => s.collapsedBranches);
+export const useHasCollapsedBranches = () => useProofStore((s) => s.collapsedBranches.size > 0);
+export const useToggleBranchCollapse = () => useProofStore((s) => s.toggleBranchCollapse);
+export const useExpandAllBranches = () => useProofStore((s) => s.expandAllBranches);
 
 // Selector for generated proof script
 export const useGeneratedProofScript = () => useProofStore((s) => {
