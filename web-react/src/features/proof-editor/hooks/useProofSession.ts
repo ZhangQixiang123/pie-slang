@@ -59,7 +59,7 @@ export function useProofSession() {
         saveSnapshot();
 
         // Store metadata
-        setAvailableLemmas(result.availableLemmas);
+        setAvailableLemmas(result.globalContext.theorems);
         setClaimType(result.claimType);
         setGlobalContext(result.globalContext);
         setMetadataClaimName(claimName); // Store claim name in metadata store

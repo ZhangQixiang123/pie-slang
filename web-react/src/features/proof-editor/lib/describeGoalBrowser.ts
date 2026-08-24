@@ -88,6 +88,47 @@ Translation:`;
 }
 
 // ---------------------------------------------------------------------------
+// Model fallback: try primary, fall back on persistent 503
+// ---------------------------------------------------------------------------
+
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const;
+
+function is503(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return msg.includes("503") || msg.includes("overloaded") || msg.includes("UNAVAILABLE");
+}
+
+/**
+ * Call Gemini with automatic model fallback on 503.
+ * Each model is retried up to `retriesPerModel` times with exponential backoff.
+ */
+async function callGeminiWithFallback(
+  genAI: GoogleGenAI,
+  contents: string,
+  retriesPerModel = 2,
+): Promise<string> {
+  let lastError: unknown;
+  for (const model of GEMINI_MODELS) {
+    for (let attempt = 0; attempt <= retriesPerModel; attempt++) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const result = await (genAI as any).models.generateContent({ model, contents });
+        if (!result.text) throw new Error("Gemini returned an empty response.");
+        return result.text.trim();
+      } catch (error: unknown) {
+        lastError = error;
+        if (!is503(error)) throw error;
+        if (attempt < retriesPerModel) {
+          await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt)));
+        }
+      }
+    }
+    console.warn(`[describeGoal] ${model} unavailable (503), trying next model...`);
+  }
+  throw lastError;
+}
+
+// ---------------------------------------------------------------------------
 // Exported function
 // ---------------------------------------------------------------------------
 
@@ -105,16 +146,5 @@ export async function describeGoalBrowser(
   apiKey: string,
 ): Promise<string> {
   const genAI = new GoogleGenAI({ apiKey });
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await (genAI as any).models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: buildPrompt(goalType, context),
-  });
-
-  if (!result.text) {
-    throw new Error("Gemini returned an empty response.");
-  }
-
-  return result.text.trim();
+  return callGeminiWithFallback(genAI, buildPrompt(goalType, context));
 }

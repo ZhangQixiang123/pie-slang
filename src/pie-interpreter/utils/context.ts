@@ -9,7 +9,7 @@ import { Source} from '../types/source';
 import { Variable } from '../types/neutral';
 import { ProofManager } from '../tactics/proof-manager';
 import { Tactic } from '../tactics/tactics';
-import { ProofTreeData } from '../tactics/proofstate';
+import { Goal, ProofTreeData } from '../tactics/proofstate';
 import { schemeParse, Parser } from '../parser/parser';
 
 /*
@@ -306,7 +306,7 @@ export async function addDefineTacticallyInteractive(
       break;
     }
 
-    const goal = goalResult.result;
+    const goal = goalResult.result as Goal;
     // Inline serialization (avoids dependency on training-data-extractor)
     const contextEntries = Array.from(goal.context.entries())
       .filter(([n]) => !n.startsWith('_'))

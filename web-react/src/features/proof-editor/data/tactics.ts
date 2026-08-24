@@ -120,6 +120,36 @@ export const TACTICS: TacticInfo[] = [
     category: "application",
     requiresContextVar: true,
   },
+
+  // Equality tactics
+  {
+    type: "symm",
+    displayName: "symm",
+    description: "Swap the sides of an equality goal: (= A x y) becomes (= A y x)",
+    category: "application",
+    requiresContextVar: false,
+  },
+  {
+    type: "trans",
+    displayName: "trans",
+    description: "Chain equalities through a middle term (transitivity)",
+    category: "application",
+    requiresContextVar: false,
+  },
+  {
+    type: "cong",
+    displayName: "cong",
+    description: "Apply a function to both sides of an equality (congruence)",
+    category: "application",
+    requiresContextVar: false,
+  },
+  {
+    type: "rewrite",
+    displayName: "rewrite",
+    description: "Rewrite the goal using an equality proof",
+    category: "application",
+    requiresContextVar: false,
+  },
   {
     type: "todo",
     displayName: "todo",

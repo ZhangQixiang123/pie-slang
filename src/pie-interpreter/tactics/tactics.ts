@@ -43,11 +43,20 @@ export abstract class Tactic {
   }
 
   // Wrapper to handle pending branches before applying.
-  // When branches are pending (e.g. after elim-Nat), auto-consume one
-  // so tactics can be applied flat without requiring explicit 'then' blocks.
+  // When branches are pending (e.g. after elim-Nat) and this tactic requires
+  // none, the textual DSL requires an explicit 'then' block to group the
+  // per-subgoal tactics. (The visual editor bypasses this by resetting
+  // pendingBranches to 0, since users pick each goal explicitly.)
   protected checkPendingBranches(state: ProofState): Perhaps<null> {
     if (this.requiresNoBranches() && state.pendingBranches > 0) {
-      state.pendingBranches--;
+      return new stop(
+        this.location,
+        new Message([
+          `Expected 'then' block to handle subgoal branch. ` +
+          `${state.pendingBranches} branch(es) remaining. ` +
+          `Use (then ...) to group tactics for each subgoal.`
+        ])
+      );
     }
     return new go(null);
   }
@@ -850,15 +859,21 @@ export class EliminateEitherTactic extends Tactic {
       );
     };
 
+    // Use descriptive binder names derived from the Either branch types,
+    // so that intro'd variables get meaningful names (not just 'x').
+    // This matters for LoRA model accuracy — it was trained on descriptive names.
+    const leftBinderName = this.binderNameForType(Lv, currentGoal.context, 'l');
+    const rightBinderName = this.binderNameForType(Rv, currentGoal.context, 'r');
+
     const leftType = new V.Pi(
-      'x',
+      leftBinderName,
       Lv,
       new HigherOrderClosure(
         (x) => doApp(motiveType, new V.Left(x))
       )
     )
     const rightType = new V.Pi(
-      'x',
+      rightBinderName,
       Rv,
       new HigherOrderClosure(
         (x) => doApp(motiveType, new V.Right(x))
@@ -886,6 +901,31 @@ export class EliminateEitherTactic extends Tactic {
         ]);
       return new go(state);
     }
+
+  /**
+   * Derive a binder name from a type value for Either elimination branches.
+   * E.g. (Even n) → "en", (Odd n) → "on", fallback to provided default.
+   */
+  private binderNameForType(typeVal: Value, context: Context, fallback: string): string {
+    try {
+      const core = readBack(context, new V.Universe(), typeVal);
+      const s = core.prettyPrint();
+      // For applied types like (Even n), use first letter of constructor + first arg
+      const match = s.match(/^\((\w+)\s/);
+      if (match) {
+        const constructorName = match[1];
+        // Use first letter lowercased as binder prefix
+        return constructorName.charAt(0).toLowerCase() + constructorName.slice(1, 3);
+      }
+      // For simple type names
+      if (/^\w+$/.test(s)) {
+        return s.charAt(0).toLowerCase();
+      }
+    } catch {
+      // Fall through to default
+    }
+    return fallback;
+  }
 
   private generateEitherMotive(context: Context, goal: Value, targetVar: string): Value {
     // Create a lambda (λ (targetVar) goal) for Either elimination
@@ -1173,7 +1213,7 @@ export class ApplyTactic extends Tactic {
     const resultType = funcType.resultType.valOfClosure(neutralArg);
 
     // Check if the result type matches the goal type
-    // We need to verify that the function's result type can produce the goal
+    // We need to vericlaudefy that the function's result type can produce the goal
     // This is a simplified check - in general, we'd need unification
     try {
       convert(currentGoal.context, this.location, new V.Universe(), resultType, goalType);
@@ -1212,6 +1252,9 @@ export class SymmetryTactic extends Tactic {
   constructor(public location: Location) {
     super(location);
   }
+
+  get tacticType(): TacticType { return "symm"; }
+  get tacticParams(): TacticParams { return {}; }
 
   toString(): string {
     return `symm`;
@@ -1255,6 +1298,9 @@ export class TransitivityTactic extends Tactic {
   ) {
     super(location);
   }
+
+  get tacticType(): TacticType { return "trans"; }
+  get tacticParams(): TacticParams { return { expression: this.middleExpr.prettyPrint() }; }
 
   toString(): string {
     return `trans ${this.middleExpr.prettyPrint()}`;
@@ -1309,6 +1355,11 @@ export class ForwardTransTactic extends Tactic {
     private rightExpr: Source
   ) {
     super(location);
+  }
+
+  get tacticType(): TacticType { return "trans"; }
+  get tacticParams(): TacticParams {
+    return { expression: `${this.leftExpr.prettyPrint()} ${this.rightExpr.prettyPrint()}` };
   }
 
   toString(): string {
@@ -1367,7 +1418,7 @@ export class ForwardTransTactic extends Tactic {
 
     state.currentGoal.goal.term = new C.Trans(leftThe.expr, rightThe.expr);
     state.currentGoal.isComplete = true;
-    state.currentGoal.completedBy = this.toString();
+    state.currentGoal.completedBy = this.toAppliedTactic();
     state.nextGoal();
 
     return new go(state);
@@ -1386,6 +1437,11 @@ export class CongTactic extends Tactic {
     private funcExpr: Source
   ) {
     super(location);
+  }
+
+  get tacticType(): TacticType { return "cong"; }
+  get tacticParams(): TacticParams {
+    return { expression: `${this.proofExpr.prettyPrint()} ${this.funcExpr.prettyPrint()}` };
   }
 
   toString(): string {
@@ -1447,7 +1503,7 @@ export class CongTactic extends Tactic {
     const resultTypeCore = Cv.readBackType(currentGoal.context);
     state.currentGoal.goal.term = new C.Cong(proofCore, resultTypeCore, funcCore);
     state.currentGoal.isComplete = true;
-    state.currentGoal.completedBy = this.toString();
+    state.currentGoal.completedBy = this.toAppliedTactic();
     state.nextGoal();
 
     return new go(state);
@@ -1470,6 +1526,9 @@ export class RewriteTactic extends Tactic {
   ) {
     super(location);
   }
+
+  get tacticType(): TacticType { return "rewrite"; }
+  get tacticParams(): TacticParams { return { expression: this.proofExpr.prettyPrint() }; }
 
   toString(): string {
     return this.motiveExpr

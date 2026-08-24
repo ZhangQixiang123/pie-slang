@@ -17,6 +17,11 @@
     "**/__tests__/**/*.ts",
     "**/?(*.)+(spec|test).ts"
   ],
+  "testPathIgnorePatterns": [
+    "/node_modules/",
+    "/web-react/",
+    "/dist/"
+  ],
   "collectCoverageFrom": [
     "src/**/*.ts",
     "!src/**/*.d.ts",

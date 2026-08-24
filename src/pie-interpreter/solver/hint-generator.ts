@@ -13,6 +13,42 @@ const MISSING_API_KEY_ERROR = new Error(
     "Please provide an API key to use the hint system.",
 );
 
+const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const;
+
+function is503(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return msg.includes("503") || msg.includes("overloaded") || msg.includes("UNAVAILABLE");
+}
+
+/**
+ * Call Gemini with automatic model fallback on 503.
+ * Each model is retried up to `retriesPerModel` times with exponential backoff.
+ */
+async function callGemini(
+  genAI: GoogleGenAI,
+  contents: string,
+  retriesPerModel = 2,
+): Promise<string> {
+  let lastError: unknown;
+  for (const model of GEMINI_MODELS) {
+    for (let attempt = 0; attempt <= retriesPerModel; attempt++) {
+      try {
+        const result = await genAI.models.generateContent({ model, contents });
+        if (!result.text) throw new Error("No response from Gemini API");
+        return result.text.trim();
+      } catch (error: unknown) {
+        lastError = error;
+        if (!is503(error)) throw error;
+        if (attempt < retriesPerModel) {
+          await new Promise(r => setTimeout(r, 2000 * Math.pow(2, attempt)));
+        }
+      }
+    }
+    console.warn(`[hint-generator] ${model} unavailable (503), trying next model...`);
+  }
+  throw lastError;
+}
+
 /**
  * Progressive hint levels for educational scaffolding
  */
@@ -104,16 +140,7 @@ Example hints:
 Your hint (1-2 sentences):`;
 
   try {
-    const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-    });
-
-    if (!result.text) {
-      throw new Error("No response from Gemini API");
-    }
-
-    return result.text.trim();
+    return await callGemini(genAI, prompt);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to generate hint: ${message}`);
@@ -173,16 +200,7 @@ Example hints:
 Your hint (1-2 sentences):`;
 
   try {
-    const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-    });
-
-    if (!result.text) {
-      throw new Error("No response from Gemini API");
-    }
-
-    return result.text.trim();
+    return await callGemini(genAI, prompt);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to generate hint: ${message}`);
@@ -315,17 +333,10 @@ export async function generateProgressiveHint(
   }
 
   try {
-    const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-    });
-
-    if (!result.text) {
-      throw new Error("No response from Gemini API");
-    }
+    const text = await callGemini(genAI, prompt);
 
     return parseProgressiveHintResponse(
-      result.text,
+      text,
       request.currentLevel,
       responseFormat,
     );
@@ -794,17 +805,10 @@ export async function explainTactic(
   console.log("[HintGenerator] 📤 Gemini explain prompt:\n", prompt);
 
   try {
-    const result = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: prompt,
-    });
+    const text = await callGemini(genAI, prompt);
 
-    if (!result.text) {
-      throw new Error("No response from Gemini API");
-    }
-
-    console.log("[HintGenerator] 📥 Gemini raw response:", result.text);
-    const parsed = parseExplainResponse(result.text, request);
+    console.log("[HintGenerator] 📥 Gemini raw response:", text);
+    const parsed = parseExplainResponse(text, request);
     console.log("[HintGenerator] 📦 Parsed hint:", JSON.stringify(parsed, null, 2));
     return parsed;
   } catch (error: unknown) {

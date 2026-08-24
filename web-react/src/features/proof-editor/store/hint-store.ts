@@ -88,11 +88,28 @@ export interface HintActions {
 
 export type HintStore = HintState & HintActions;
 
+// Persist API key and LoRA URL to localStorage
+const STORAGE_KEY_API = 'pie-slang:gemini-api-key';
+const STORAGE_KEY_LORA = 'pie-slang:lora-server-url';
+
+function loadFromStorage(key: string): string | null {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function saveToStorage(key: string, value: string | null) {
+  try {
+    if (value) localStorage.setItem(key, value);
+    else localStorage.removeItem(key);
+  } catch { /* ignore */ }
+}
+
+// Priority: localStorage > .env > null
+const envApiKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_API_KEY) || null;
+
 const initialState: HintState = {
   goalHints: new Map(),
   activeGhostNodeId: null,
-  apiKey: null,
-  loraServerUrl: null,
+  apiKey: loadFromStorage(STORAGE_KEY_API) || envApiKey,
+  loraServerUrl: loadFromStorage(STORAGE_KEY_LORA),
 };
 
 /**
@@ -252,10 +269,12 @@ export const useHintStore = create<HintStore>()(
     },
 
     setApiKey: (key: string | null) => {
+      saveToStorage(STORAGE_KEY_API, key);
       set({ apiKey: key });
     },
 
     setLoraServerUrl: (url: string | null) => {
+      saveToStorage(STORAGE_KEY_LORA, url);
       set({ loraServerUrl: url });
     },
 

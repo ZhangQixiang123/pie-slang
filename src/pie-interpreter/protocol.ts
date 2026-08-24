@@ -97,6 +97,10 @@ export type TacticType =
   | "elimEqual"
   | "elimAbsurd"
   | "apply"
+  | "symm"
+  | "trans"
+  | "cong"
+  | "rewrite"
   | "todo";
 
 /** Parameters for tactic application. Which fields are required depends on the tactic. */
@@ -125,6 +129,10 @@ export const TACTIC_REQUIREMENTS: Record<TacticType, { variableName?: boolean; e
   elimEqual:   { variableName: true },
   elimAbsurd:  { variableName: true },
   apply:       { expression: true },
+  symm:        {},
+  trans:       { expression: true },
+  cong:        { expression: true },
+  rewrite:     { expression: true },
   todo:        {},
 };
 

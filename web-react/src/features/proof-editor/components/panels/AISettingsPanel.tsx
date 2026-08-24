@@ -22,6 +22,10 @@ export function AISettingsPanel() {
   const [showKey, setShowKey] = useState(false);
   const [inputValue, setInputValue] = useState(apiKey || '');
   const [loraInput, setLoraInput] = useState(loraServerUrl || 'http://localhost:8000');
+
+  // Sync input fields when store values change (e.g., loaded from localStorage)
+  useEffect(() => { setInputValue(apiKey || ''); }, [apiKey]);
+  useEffect(() => { setLoraInput(loraServerUrl || 'http://localhost:8000'); }, [loraServerUrl]);
   const [loraHealth, setLoraHealth] = useState<'unknown' | 'checking' | 'ok' | 'error'>('unknown');
 
   const handleSaveKey = useCallback(() => {
