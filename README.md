@@ -11,38 +11,39 @@ It is still under construction, especially for the language server part, so it m
 
 We have published the Pie language server as a VSCode extension, named [pie-lsp](https://marketplace.visualstudio.com/items?itemName=DaoxinLi.pie-lsp&ssr=false#review-details)
 
-## Getting Started
+## Running the Tests
 
-To get started with the Pie interpreter:
+Requirements: Node.js 18 or newer (tested up to Node 24). No other tools are
+needed — npm comes with Node.
 
-1. Clone the repository:
+```bash
+git clone https://github.com/source-academy/pie-slang.git
+cd pie-slang
+npm install
+npm test
+```
 
-   ```bash
-   git clone https://github.com/source-academy/pie-slang.git
-   cd pie-slang
-   ```
+`npm test` runs the full Jest suite: 80 suites, about 2,800 tests, covering the
+interpreter (parser, type checker, evaluator), tactics, named holes, and
+user-defined inductive types. All tests should pass; the run takes well under a
+minute.
 
-2. Install dependencies:
+To build the distributable bundle (output in `./dist`):
 
-   ```bash
-   yarn install
-   ```
+```bash
+npm run build
+```
 
-3. Build the project:
+To try a simple Pie program without installing anything, use the
+[online playground](https://source-academy.github.io/pie-slang/):
 
-   ```bash
-   yarn build
-   ```
+```scheme
+(claim identity (-> Nat Nat))
+(define identity (λ (n) n))
+```
 
-4. Use conductor: find dist files in `./dist` folder.
-
-5. Try a simple Pie program in our [online playground](https://source-academy.github.io/pie-slang/):
-   ```scheme
-   (claim identity (-> Nat Nat))
-   (define identity (λ (n) n))
-   ```
-   For more information about the project, please visit our wiki pages.
-   To learn more about the language, you may read the book The Little Typer. Our wiki also contains a brief overview of the language.
+For more about the project, see our wiki pages. To learn the language itself,
+read The Little Typer; the wiki also contains a brief overview.
 
 ## Tactic Predictor: Theorems, Fine-Tuning, and Evaluation
 
