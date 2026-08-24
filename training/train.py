@@ -26,7 +26,7 @@ from trl import SFTTrainer, SFTConfig
 # ─── Config ───────────────────────────────────────────────────────────────
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DATA = PROJECT_ROOT / "training" / "training-data-lora-single.jsonl"
+DEFAULT_DATA = PROJECT_ROOT / "training-data-lora-single.jsonl"
 DEFAULT_OUT = PROJECT_ROOT / "training" / "output"
 
 MODEL_NAME = "Qwen/Qwen2.5-Coder-7B-Instruct"

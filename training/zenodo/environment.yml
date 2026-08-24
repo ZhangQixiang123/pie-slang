@@ -1,0 +1,15 @@
+# Reproducible conda environment for the Pie tactic-prediction model.
+#
+#   conda env create -f environment.yml
+#   conda activate pie-tactic-model
+#
+# Pins Python to the exact version used for the published results; all ML/HTTP
+# dependencies are pinned in requirements-lock.txt (single source of truth).
+name: pie-tactic-model
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11.15
+  - pip
+  - pip:
+      - -r requirements-lock.txt

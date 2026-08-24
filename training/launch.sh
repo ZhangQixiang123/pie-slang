@@ -14,8 +14,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONDA_BIN="${CONDA_EXE:-conda}"
-CONDA_ENV="${CONDA_ENV:-pie-train}"
+CONDA="/d/Tools/Conda/Scripts/conda.exe"
 PORT="${PORT:-8000}"
 ADAPTER="$SCRIPT_DIR/output/adapter"
 
@@ -26,7 +25,7 @@ fi
 
 echo "Starting serve.py with PEFT adapter..."
 echo "Frontend should connect to http://localhost:$PORT"
-"$CONDA_BIN" run -n "$CONDA_ENV" --no-capture-output \
+"$CONDA" run -n pie-train --no-capture-output \
   python "$SCRIPT_DIR/serve.py" \
     --adapter "$ADAPTER" \
     --port "$PORT"

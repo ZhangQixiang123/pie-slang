@@ -35,6 +35,7 @@ from __future__ import annotations
 import abc
 import argparse
 import json
+import os
 import sys
 import time
 from collections import defaultdict
@@ -143,7 +144,10 @@ class LocalPredictor(TacticPredictor):
         adapter_config_path = Path(adapter_path) / "adapter_config.json"
         with open(adapter_config_path) as f:
             adapter_cfg = json.load(f)
-        base_model_name = adapter_cfg["base_model_name_or_path"]
+        # Allow overriding the base model with a local vendored copy (offline /
+        # self-contained bundles, e.g. the Zenodo artifact). Falls back to the
+        # HuggingFace repo id recorded in the adapter config.
+        base_model_name = os.environ.get("PIE_BASE_MODEL") or adapter_cfg["base_model_name_or_path"]
 
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -157,7 +161,7 @@ class LocalPredictor(TacticPredictor):
         )
         self.model = PeftModel.from_pretrained(base_model, adapter_path)
         self.model.eval()
-        self.tokenizer = AutoTokenizer.from_pretrained(base_model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(adapter_path)
         self._torch = torch
 
     def predict(self, goal, global_ctx, local_ctx):
@@ -342,8 +346,18 @@ def main():
         print(f"Test proofs not found: {test_path}")
         sys.exit(1)
 
+    # Parse JSONL defensively: skip blank lines and any malformed fragment
+    # (e.g. a stray trailing line) rather than crashing the whole evaluation.
+    test_cases = []
     with open(test_path, "r", encoding="utf-8") as f:
-        test_cases = [json.loads(line) for line in f if line.strip()]
+        for lineno, line in enumerate(f, 1):
+            if not line.strip():
+                continue
+            try:
+                test_cases.append(json.loads(line))
+            except json.JSONDecodeError as e:
+                print(f"  warning: skipping unparseable line {lineno} "
+                      f"in {test_path.name}: {e}", file=sys.stderr)
 
     # Detect chat-format (training-data style: each line = {"messages": [...]})
     # vs per-proof eval format (each line has theoremName + steps).
