@@ -45,6 +45,7 @@ export interface TacticParameters extends TacticParams {
 export interface GoalNodeData {
   kind: "goal";
   goalType: string; // The type to prove
+  expandedGoalType?: string; // Optinal expanded type
   context: ContextEntry[]; // Scoped context for this goal
   status: "pending" | "in-progress" | "completed" | "todo";
   parentGoalId?: string; // For scope inheritance
@@ -97,10 +98,12 @@ export type ProofNode = GoalNode | TacticNode | LemmaNode;
 
 export interface ProofEdgeData {
   kind:
-    | "goal-to-tactic"
-    | "tactic-to-goal"
-    | "lemma-to-tactic"
-    | "context-to-tactic";
+  | "goal-to-tactic"
+  | "tactic-to-goal"
+  | "lemma-to-tactic"
+  | "context-to-tactic"
+  | "goal-to-lemma"
+  | "context-to-lemma";
   outputIndex?: number; // Which output port of tactic
   contextVarId?: string; // Which context variable (for context-to-tactic edges)
   [key: string]: unknown; // Index signature for React Flow compatibility

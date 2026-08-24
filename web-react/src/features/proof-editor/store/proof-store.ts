@@ -347,7 +347,7 @@ export const useProofStore = create<ProofStore>()(
         });
 
         // Apply manual positions and offset children
-        const mergedNodes = nodes.map((node) => {
+        const dynamicNodes = nodes.map((node) => {
           const manualPos = manualPositions.get(node.id);
           if (manualPos) {
             return { ...node, position: manualPos };
@@ -386,6 +386,9 @@ export const useProofStore = create<ProofStore>()(
           return node;
         });
 
+        const mergedNodes = [...lemmaNodes, ...dynamicNodes];
+        const mergedEdges = [...existingLemmaEdges, ...edges];
+
         set((state) => {
           // Clear stale collapsedBranches when starting a new proof session.
           // A new session is indicated by a new claimName being provided that
@@ -398,11 +401,11 @@ export const useProofStore = create<ProofStore>()(
           }
 
           state.nodes = mergedNodes;
-          state.edges = edges;
+          state.edges = mergedEdges;
           state.sessionId = sessionId;
           state.rootGoalId = proofTree.root.goal.id;
           state.isProofComplete = proofTree.isComplete;
-          state.lastSyncedState = { nodes: mergedNodes, edges };
+          state.lastSyncedState = { nodes: mergedNodes, edges: mergedEdges };
           state.proofTreeData = proofTree;
           if (claimName) {
             state.claimName = claimName;
@@ -680,6 +683,21 @@ function getConnectionData(
     return { kind: "lemma-to-tactic" };
   }
 
+  // Goal → Lemma (Direct Application or Context binding)
+  if (source.type === "goal" && target.type === "lemma") {
+    if (connection.sourceHandle?.startsWith("ctx-")) {
+      const contextVarId = connection.sourceHandle.replace("ctx-", "");
+      // Get the parameter name from the target handle (e.g., lemma-input-x -> x)
+      const paramName = connection.targetHandle?.replace("lemma-input-", "") || "";
+      return {
+        kind: "context-to-lemma",
+        contextVarId,
+        paramName
+      };
+    }
+    return { kind: "goal-to-lemma" };
+  }
+
   // Invalid connection
   return null;
 }
@@ -723,6 +741,17 @@ export function isValidConnection(
     return (
       connection.sourceHandle === "lemma-output" &&
       connection.targetHandle === "context-input"
+    );
+  }
+
+  // Goal → Lemma (Direct Application & Context Binding)
+  if (sourceNode.type === "goal" && targetNode.type === "lemma") {
+    if (connection.sourceHandle?.startsWith("ctx-")) {
+      return connection.targetHandle?.startsWith("lemma-input-") ?? false;
+    }
+    return (
+      connection.sourceHandle === "goal-output" &&
+      connection.targetHandle === "lemma-input"
     );
   }
 

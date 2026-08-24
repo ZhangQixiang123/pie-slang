@@ -17,7 +17,7 @@ import { ProofPicker } from '@/features/proof-editor/components/ProofPicker';
 import type { GlobalEntry } from '@pie/protocol';
 
 function AppContent() {
-  const { applyTactic, error } = useProofSession();
+  const { applyTactic, startSession, scan, error } = useProofSession();
   const updateNode = useProofStore((s) => s.updateNode);
   const nodes = useProofStore((s) => s.nodes);
   const setManualPosition = useProofStore((s) => s.setManualPosition);
@@ -33,10 +33,53 @@ function AppContent() {
   // Use example store
   const selectedExample = useExampleStore((s) => s.selectedExample);
   const selectExample = useExampleStore((s) => s.selectExample);
+  const exampleSource = useExampleStore((s) => s.exampleSource);
 
   // Use metadata store for global context
   const globalContext = useMetadataStore((s) => s.globalContext);
 
+  const handleSelectProof = useCallback(async (proofName: string) => {
+    if (!exampleSource) return;
+
+    setSelectedProof(proofName);
+    try {
+      await startSession(exampleSource, proofName);
+    } catch (e) {
+      console.error("Failed to start session:", e);
+    }
+  }, [exampleSource, startSession]);
+
+  // Scan whenever example source changes, debounced to avoid scanning on every keystroke
+
+  useEffect(() => {
+    if (!exampleSource) return;
+
+    const timeoutId = setTimeout(() => {
+      scan(exampleSource).then((result) => {
+        setFoundClaims(result.claims);
+        setFoundTheorems(result.theorems);
+
+        // Check if the currently selected proof is still in the file
+        const isCurrentStillValid =
+          selectedProof &&
+          (result.claims.some(c => c.name === selectedProof) ||
+            result.theorems.some(t => t.name === selectedProof));
+
+        // If not valid, or not set, try to select something
+        if (!isCurrentStillValid) {
+          if (result.claims.length > 0) {
+            handleSelectProof(result.claims[0].name);
+          } else if (result.theorems.length > 0) {
+            handleSelectProof(result.theorems[0].name);
+          } else {
+            setSelectedProof(null);
+          }
+        }
+      });
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [exampleSource, scan, selectedProof, handleSelectProof]);
   // Set up the global callback for tactic application
   const handleApplyTactic = useCallback(async (options: ApplyTacticOptions) => {
     const { goalId, tacticType, params, tacticNodeId } = options;
@@ -128,6 +171,14 @@ function AppContent() {
             ))}
           </select>
         </div>
+
+        {/* Proof Picker */}
+        <ProofPicker
+          claims={foundClaims}
+          theorems={foundTheorems}
+          selectedClaim={selectedProof}
+          onSelect={handleSelectProof}
+        />
 
         {/* Show tactic error in header */}
         {(tacticError || error) && (
