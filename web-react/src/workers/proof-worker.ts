@@ -189,8 +189,7 @@ const proofWorkerAPI: ProofWorkerAPI = {
         addDefineToContext,
         addDefineTacticallyToContext,
       } = await import("@pie/utils/context");
-      const { go, stop } = await import("@pie/types/utils");
-      const { Position } = await import("@scheme/transpiler/types/location");
+      const { go } = await import("@pie/types/utils");
 
       // Parse source code
       const astList = schemeParse(sourceCode);

@@ -14,10 +14,10 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Linting */
+    /* Linting. Unused-variable style is enforced by ESLint, not here: this
+       build also typechecks the parent interpreter sources, which are not
+       held to noUnusedLocals. */
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
 
@@ -29,5 +29,10 @@
       "@scheme/*": ["../src/scheme-parser/*"]
     }
   },
-  "include": ["src", "../src/pie-interpreter", "../src/scheme-parser"]
+  "include": ["src", "../src/pie-interpreter", "../src/scheme-parser"],
+  "exclude": [
+    "../src/pie-interpreter/__tests__",
+    "../src/pie-interpreter/index.ts",
+    "../src/pie-interpreter/pie-evaluator.ts"
+  ]
 }
